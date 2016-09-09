@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<link href='https://fonts.googleapis.com/css?family=PT+Serif' rel='stylesheet' type='text/css'>
+		<link href='https://fonts.googleapis.com/css?family=PT+Sans' rel='stylesheet' type='text/css'>
+		<meta charset="UTF-8">
+		<title>Scoring Chance (%) and Salary</title>
+		<style type="text/css">
+		body {
+		background-color: white;
+		font-family: 'PT Serif', serif;
+		}
+		h1 {
+			font-weight: 300;
+			color: #000;
+			font-family: "PT Sans", sans-serif;
+			font-size: 56px;
+			margin-top: 10px;
+			margin-bottom: 0px;
+			padding-left: 100px;
+			}
+		h2 {
+			font-weight: 300;
+			color: #000;
+			font-family: "PT Sans", sans-serif;
+			font-size: 32px;
+			margin-bottom: 20px;
+			margin-top: 0px;
+			padding-left: 100px;
+			}
+		p {
+			font-size: 18px;
+			width: 1000px;
+			margin-top: 5px;
+			padding-left: 100px;
+			margin-bottom: 10px;
+			color: #333;
+		}
+		a {
+			color: steelblue;
+			text-decoration: none;
+		}
+		a:hover {
+			color: darkslategray;
+		}
+		.footer {
+			font-size: 14px;
+			margin-top: 0px;
+		}
+		#svganchor {
+			padding-left: 300px;
+		}
+		.checkbox1, .checkbox2, .checkbox3 {
+			padding-left: 100px;
+		}
+		.btn-group {
+			padding-left: 300px;
+			display: inline;
+		}
+		.button {
+			display: inline-block;
+			color: #666;
+			background-color: #eee;
+			text-transform: uppercase;
+			font-size: 10px;
+			padding: 5px 5px;
+			border-radius: 5px;
+			-moz-border-radius: 5px;
+			-webkit-border-radius: 5px;
+			border: 1px solid rgba(0,0,0,0.3);
+			border-bottom-width: 3px;
+			margin-right: 0px;
+			margin-bottom: 10px;
+			margin-top: 10px;
+		   }
+		.button:hover {
+			background-color: #e3e3e3;
+			border-color: rgba(0,0,0,0.5);
+			cursor: pointer;
+		   }
+		.button:active {
+			background-color: #CCC;
+			border-color: rgba(0,0,0,0.9);
+		   }
+		.button:focus {
+			outline: none;
+		}
+		svg {
+			background-color: white;
+		}
+		div.tooltip {
+		    position: absolute;
+		    text-align: left;
+		    font-family: "PT Sans", sans-serif;
+			white-space: normal;
+		    padding: 4px;
+		    font-size: 14px;
+		    background: #eee;
+		    border: 1px solid gray;
+		    border-radius: 2px;
+		    pointer-events: none;
+		    cursor: none;
+		}
+		.axis path,
+		.axis line {
+			fill: none;
+			stroke: lightslategray;
+			shape-rendering: crispEdges;
+		}
+		.axis text {
+			font-family: sans-serif;
+			font-size: 10px;
+			fill: #444444;
+			pointer-events: none;
+		}
+		.gridLine{
+		    stroke-opacity: 0.25;
+		    stroke-dasharray: 4, 4;
+		    pointer-events: none;
+		}
+		.highlightText {
+			cursor: pointer;
+		}
+		.highlightText:hover {
+			fill: #1F77B4;
+		}
+		</style>
+		<script src="./lib/d3.v4.min.js"></script>
+		<script src="https://d3js.org/d3.v4.min.js"></script>
+	</head>
+	<body>
+
+		<br>
+		<div class="btn-group" data-toggle="buttons-radio">
+			<button type="button" class="button" value="scatter">Scatterplot</button>
+			<button type="button" class="button" value="slope">Slopegraph</button>
+		</div>
+		<div id="svganchor"></div>
+		<br>
+    <p class="body"><2011-2015 MLS Forwards with atleast 60 shots on goal.<br>
+			<strong>Scatterplot:</strong> Scoring Chance vs Salary. Radius of circles based on Goals Scored.<br>
+			<strong>Slopegraph Analysis:</strong> Blue players are underpaid players, who scoring chance % more than the average.<br>
+			Red players are paid above average player, but whose scoring chance % is less than average. <br>
+			Green players are paid above average and have a scoring chance above average <br>
+			Black players are paid below averaeg and have a scoring chance below average</p>
+		<script type="text/javascript">
+			var w = 600, h = 600;
+			var paddingScatter = [10, 10, 50, 50];
+			var paddingSlope = [0, 0, 0, 0];
+
+			// setup x
+			var xValue = function(d) { return d.normSal;}, // data -> value
+			    xScale = d3.scaleLinear().range([0, w]), // value -> display
+			    xMap = function(d) { return xScale(xValue(d));}, // data -> display
+			    xAxis = d3.axisBottom(xScale);
+
+			// setup y
+			var yValue = function(d) { return d["G"];}, // data -> value
+			    yScale = d3.scaleLinear().range([h, 0]), // value -> display
+			    yMap = function(d) { return yScale(yValue(d));}, // data -> display
+			    yAxis = d3.axisLeft(yScale);
+
+			var tt = d3.select("#svganchor").append("div")
+				.attr("class", "tooltip")
+				.style("opacity", 0);
+			var colors = d3.scaleOrdinal()
+				.domain(["Salary", "Scoring Chance (%)", "good"])
+				.range(['#9C0824','#1F77B4', '#2ecc71']);
+			var svg = d3.select("#svganchor")
+				.append("svg")
+				.attr("width", w)
+				.attr("height", h);
+			var formatNumber = d3.format(".2f");
+
+			//Load the data
+			d3.csv("/data/Salarytogoals.csv", function(data){
+				data.forEach(function(d){
+					d.Salary = +d.Salary;
+					d.G = +d.G;
+					d.normSal = +d.normSal
+					d.SC = +d.SC
+					d.SOG = +d.SOG
+				});
+
+				//radius of dots
+				radius = function(d) { return d['G']; }
+
+				var arrayPearsons = [
+					data.map(function(d){ return +d.Salary}),
+					data.map(function(d){ return +d.SC})
+				];
+				var rCoefficient = findCorrelation(arrayPearsons, 0, 1);
+				var correlationScale = d3.scaleLinear()
+					.range([ h  - paddingScatter[2] - 62, paddingScatter[0] + 138 ])
+					.domain([1, -1]);
+					// don't want dots overlapping axis, so add in buffer to data domain
+  			xScale.domain([d3.min(data, xValue)-1, d3.max(data, xValue)+1]);
+  			yScale.domain([d3.min(data, yValue)-1, d3.max(data, yValue)+1]);
+
+				var correlationLine = svg.append("line");
+				var correlationText = svg.append("text");
+
+				correlationText.attr("x", paddingScatter[3] + 20)
+					.attr("y", paddingScatter[0] + 240)
+					.attr("font-family", "PT Sans")
+					.attr("font-weight", 700)
+					.attr("font-size", 16)
+					.attr("fill-opacity", 0)
+					.text("r = " + formatNumber(rCoefficient));
+
+				correlationLine.attr("x1", paddingScatter[3] + 10)
+					.attr("x2", w - paddingScatter[1] - 10)
+					.attr("y1", correlationScale(rCoefficient))
+					.attr("y2", correlationScale(-rCoefficient))
+					.attr("stroke-width", 4)
+					.attr("opacity", 0)
+					.attr("stroke", "black");
+
+
+				var circlesSalary = svg.selectAll(".circlesSalary")
+					.data(data, function(d){ return d.Player})
+					.enter()
+					.append("circle")
+					.attr("class", function(d){ return "Player " + d.Player.replace(/\s/g, '')})
+				circlesSalary.attr("stroke", "white")
+					.attr("fill", colors("Salary"))
+					.attr("r", radius);
+
+				var circlesSC = svg.selectAll(".circlesSC")
+					.data(data, function(d){ return d.Player})
+					.enter()
+					.append("circle")
+					.attr("class", function(d){ return "Player " + d.Player.replace(/\s/g, '')})
+
+				var connectingLine = svg.selectAll(".conLine")
+					.data(data, function(d){ return d.Player;})
+					.enter()
+					.append("line")
+					.attr("class", function(d){ return "Player " + d.Player.replace(/\s/g, '')})
+
+				circlesSC.attr("stroke", "white")
+					.attr("fill", colors("Salary"))
+					.attr("r", radius);
+				var xAxisText = svg.append("text");
+				xAxisText.attr("text-anchor", "middle")
+					.attr("x", (w + paddingScatter[3])/ 2)
+					.attr("y", h - 10)
+					.attr("font-family", "PT Sans")
+					.attr("font-size", 14)
+					.attr("fill", "#333")
+					.text("Normalized Salary")
+					.attr("pointer-events", "none");
+				var yAxisText = svg.append("text");
+				yAxisText.attr("text-anchor", "middle")
+						.attr("x", -(h - paddingScatter[3])/2)
+						.attr("y", 18)
+						.attr("font-family", "PT Sans")
+						.attr("font-size", 14)
+						.attr("fill", "#333")
+						.text("Scoring Chance (%)")
+						.attr("transform", "rotate(-90)")
+						.attr("fill-opacity", 0)
+						.attr("pointer-events", "none");
+				var yAxisText2 = svg.append("text");
+				yAxisText2.attr("text-anchor", "middle")
+						.attr("x", 150)
+						.attr("y", h - 10)
+						.attr("font-family", "PT Sans")
+						.attr("font-size", 14)
+						.attr("fill", "#333")
+						.text("Scoring Chance (%)")
+						.attr("fill-opacity", 0)
+						.attr("pointer-events", "none");
+				svg.append("g")
+					.attr("class", "x axis")
+					.attr("transform", "translate(0," + (h - paddingScatter[2]) +")")
+					.call(xAxis);
+				svg.append("g")
+					.attr("class", "y axis")
+					.attr("transform", "translate(" + (paddingScatter[3]) + ",0)")
+					.call(yAxis);
+				d3.selectAll(".button").on("click", function(){
+					var thisClicked = this.value
+					if (thisClicked == "scatter"){
+						drawScatter();
+					} else if (thisClicked == "slope"){
+						drawSlope();
+					}
+				});
+				var header = svg.append("text");
+				header.attr("x", 500)
+					.attr("text-anchor", "middle")
+					.attr("y", 10)
+					.attr("fill-opacity", 0)
+					.attr("pointer-events", "none")
+					.attr("font-family", "PT Sans")
+					.attr("font-size", 12)
+					.attr("class", "highlightText")
+					.text("MOUSE OVER TO HIGHLIGHT");
+				var highlightSC = svg.append("text");
+				highlightSC.attr("text-anchor", "middle")
+					.attr("x", 500)
+					.attr("y", 40)
+					.attr("fill-opacity", 0)
+					.attr("font-family", "PT Serif")
+					.attr("font-size", 12)
+					.attr("class", "highlightText")
+					.attr("pointer-events", "none")
+					.text("Players List");
+				var highlightSalary = svg.append("text");
+				highlightSalary.attr("text-anchor", "middle")
+					.attr("x", 500)
+					.attr("y", 60)
+					.attr("fill-opacity", 0)
+					.attr("font-family", "PT Serif")
+					.attr("font-size", 12)
+					.attr("class", "highlightText")
+					.attr("pointer-events", "none")
+					.text("Salary, SC%, Goals");
+				var PlayersList = svg.selectAll(".PlayersList")
+					.data(data)
+					.enter()
+					.append("text");
+				PlayersList.attr("text-anchor", "middle")
+					.attr("x", 500)
+					.attr("y", function(d, i){ return 80 + i*10})
+					.attr("fill-opacity", 0)
+					.attr("pointer-events", "none")
+					.attr("font-family", "PT Sans")
+					.attr("font-size", 10)
+					.attr("class", "highlightText")
+					.text(function(d){ return d.Player});
+				drawScatter();
+
+				//Scatterplot
+				function drawScatter(){
+					xScale.range([paddingScatter[3], w - paddingScatter[1]])
+						.domain([-1, 105]);
+					yScale.range([h - paddingScatter[2], paddingScatter[0]])
+						.domain([4, 31]);
+					header.transition().duration(500).attr("fill-opacity", 0).attr("pointer-events", "none");
+					highlightSalary.transition().duration(500).attr("fill-opacity", 0).attr("pointer-events", "none");
+					highlightSC.transition().duration(500).attr("fill-opacity", 0).attr("pointer-events", "none");
+					PlayersList.transition().duration(500).attr("fill-opacity", 0).attr("pointer-events", "none");
+					d3.transition(svg).select(".x.axis")
+						.transition()
+						.duration(1000)
+						.attr("opacity", 1)
+						.call(xAxis);
+					//yAxis.ticks(8)
+					//	.tickFormat(function(d){ return d});
+					d3.transition(svg).select(".y.axis")
+						.transition()
+						.duration(1000)
+						.call(yAxis);
+					d3.selectAll(".y.axis path").attr("opacity", 1);
+					circlesSalary.transition()
+						.duration(1500)
+						.attr("cx", function(d){
+							return xScale(d.normSal)
+						})
+						.attr("cy", function(d){
+							return yScale(d.SC)
+						})
+						.attr("r", radius)
+						.attr("stroke", "white")
+						.attr("fill", function(d){
+							if (d.Player == "Average"){
+								return "black";
+							} else {
+								return colors("Salary");
+							}
+						})
+						.attr("opacity", 1)
+						.attr("pointer-events", "none");
+					circlesSC.transition()
+						.duration(1500)
+						.attr("cx", function(d){
+							return xScale(d.normSal)
+						})
+						.attr("cy", function(d){
+							return yScale(d.SC)
+						})
+						.attr("r", radius)
+						.attr("stroke", "white")
+						.attr("fill", function(d){
+							if (d.Player == "Average"){
+								return "black";
+							} else {
+								return colors("Salary");
+							}
+						})
+						.attr("opacity", 1);
+					circlesSC.on("mousemove", function(d){
+						d3.select(this).attr("stroke", "Orange");
+						if (d.Player == "Average"){
+							tt.html("MLS average<br>Salary: <strong>" +
+							d.Salary + "</strong><br>Scoring Chance (%): <strong>" + d.SC +
+							"</strong><br>Goals: <strong>" + d.G + "</strong>")
+								.style('top', d3.event.pageY - 12 + 'px')
+				                .style('left', d3.event.pageX + 25 + 'px')
+				                .style("opacity", 0.95);
+						} else {
+						tt.html("Player: <strong>" + d.Player +" ("+ d.Year + ") " + "</strong><br>Salary: <strong>" +
+							d.Salary + "</strong><br>Scoring Chance (%): <strong>" + d.SC +
+							"</strong><br>Goals: <strong>" + d.G + "</strong>")
+								.style('top', d3.event.pageY - 12 + 'px')
+				                .style('left', d3.event.pageX + 25 + 'px')
+				                .style("opacity", 0.95);
+				        }
+					}).on("mouseout", function(d){
+						d3.select(this).attr("stroke", "white");
+						tt.style("opacity", 0);
+					});
+					connectingLine.transition()
+						.duration(1500)
+						.attr("x1", function(d){
+							return xScale(d.normSal)
+						})
+						.attr("x2", function(d){
+							return xScale(d.normSal)
+						})
+						.attr("y1", function(d){
+							return yScale(d.SC)
+						})
+						.attr("y2", function(d){
+							return yScale(d.SC)
+						})
+						.attr("stroke", function(d){
+							if(d.Player != "Average" && d.SC > 14.4 && d.normSal > 10.0){
+								return colors("Scoring Chance (%)");
+							} else if (d.Player != "Average" && d.SC < 14.4 && d.normSal < 10.0){
+								return colors("Salary");
+							} else {
+								return "black";
+							}
+						})
+						.attr("stroke-width", 1);
+					d3.selectAll("g.x.axis")
+		            .append("line")
+						.classed("gridLine", true)
+						.attr("x1", 0)
+						.attr("y1", 0)
+						.attr("x2", 0)
+						.attr("y2", - (h - paddingScatter[0] - paddingScatter[2]));
+		           	d3.selectAll("g.y.axis")
+		            .append("line")
+						.classed("gridLine", true)
+						.attr("x1", 0)
+						.attr("y1", 0)
+						.attr("y2", 0)
+						.attr("x2", (w - paddingScatter[3] - paddingScatter[1]));
+					correlationLine.transition().duration(1000).attr("opacity", 0.25);
+					correlationText.transition().duration(1000).attr("fill-opacity", 0.25);
+					yAxisText.transition()
+						.duration(1000)
+						.attr("fill-opacity", 1);
+					yAxisText2.transition()
+						.duration(1000)
+						.attr("fill-opacity", 0);
+				//end of drawScatter
+				};
+
+
+				//Slop Graph
+				function drawSlope(){
+					yScale.range([h - paddingScatter[2], paddingScatter[0]])
+						.domain([-1, 110]);
+					d3.selectAll(".Player").attr("opacity", 1);
+					header.transition().duration(1000).attr("fill-opacity", 1);
+					highlightSC.transition().duration(1000).attr("fill-opacity", 1).attr("pointer-events", "all");
+					highlightSalary.transition().duration(1000).attr("fill-opacity", 1).attr("pointer-events", "all");
+					PlayersList.transition().duration(1000).attr("fill-opacity", 1).attr("pointer-events", "all");
+					highlightSC.on("mouseover", function(){
+						d3.selectAll(".Player").attr("opacity", function(d){
+							if(d.SC > d.SC){
+								return 1;
+							} else {
+								return 0.1
+							}
+						});
+					}).on("mouseout", function(){
+						d3.selectAll(".Player").attr("opacity", 1);
+					});
+					highlightSalary.on("mouseover", function(){
+						d3.selectAll(".Player").attr("opacity", function(d){
+							if(d.SC > d.SC){
+								return 1;
+							} else {
+								return 0.1
+							}
+						});
+					}).on("mouseout", function(){
+						d3.selectAll(".Player").attr("opacity", 1);
+					});
+					PlayersList.on("mouseover", function(d){
+						d3.selectAll(".Player").attr("opacity", 0.1);
+						d3.selectAll("." + d.Player.replace(/\s/g, '')).attr("opacity", 1);
+						if (d.Player == "Average"){
+							tt.html("MLS average<br>Salary: $<strong>" +
+							d.Salary + "</strong><br>Scoring Chance (%): <strong>" + d.SC +
+							"</strong><br>Goals: <strong>" + d.G + "</strong>")
+								.style('top', d3.event.pageY - 60 + 'px')
+				                .style('left', d3.event.pageX + 25 + 'px')
+				                .style("opacity", 0.95);
+						} else {
+						tt.html("Player: <strong>" + d.Player +" ("+ d.Year + ") " + "</strong><br>Salary: $<strong>" +
+							d.Salary + "</strong><br>Scoring Chance (%): <strong>" + d.SC +
+							"</strong><br>Goals: <strong>" + d.G + "</strong>")
+								.style('top', d3.event.pageY - 60 + 'px')
+				                .style('left', d3.event.pageX + 25 + 'px')
+				                .style("opacity", 0.95);
+				        };
+						}).on("mouseout", function(){
+						d3.selectAll(".Player").attr("opacity", 1);
+						tt.style("opacity", 0);
+					});
+					correlationText.transition().duration(500).attr("fill-opacity", 0);
+					correlationLine.transition().duration(500).attr("opacity", 0);
+
+					circlesSC.transition()
+						.duration(1500)
+						.attr("cx", 150)
+						.attr("cy", function(d){
+							return yScale(d.SC)
+						})
+						.attr("r", 3)
+						.attr("fill", function(d){
+							if(d.Player != "Average" && d.SC > 14.4 && d.normSal < 10.0){
+								return colors("Scoring Chance (%)");
+							} else if (d.Player != "Average" && d.SC <= 14.4 && d.normSal >= 10.0){
+								return colors("Salary");
+							} else if (d.Player != "Average" && d.SC >= 14.4 && d.normSal >= 10.0){
+								return colors("good");
+							} else {
+								return "black";
+							}
+						});
+					circlesSalary.transition()
+						.duration(1500)
+						.attr("cx", (w + paddingScatter[3])/ 2)
+						.attr("cy", function(d){
+							return yScale(d.normSal)
+						})
+						.attr("r", 3)
+						.attr("fill", function(d){
+							if(d.Player != "Average" && d.SC > 14.4 && d.normSal < 10.0){
+								return colors("Scoring Chance (%)");
+							} else if (d.Player != "Average" && d.SC <= 14.4 && d.normSal >= 10.0){
+								return colors("Salary");
+							} else if (d.Player != "Average" && d.SC >= 14.4 && d.normSal >= 10.0){
+								return colors("good");
+							} else {
+								return "black";
+							}
+						})
+						.attr("pointer-events", "all");
+					circlesSalary.on("mousemove", function(d){
+						d3.selectAll(".Player").attr("opacity", 0.1);
+						d3.selectAll("." + d.Player.replace(/\s/g, '')).attr("opacity", 1);
+						if (d.Player == "Average"){
+							tt.html("MLS average<br>Salary: <strong>" +
+							d.Salary + "</strong><br>Scoring Chance (%): <strong>" + d.SC +
+							"</strong><br>Goals: <strong>" + d.G + "</strong>")
+								.style('top', d3.event.pageY - 12 + 'px')
+				                .style('left', d3.event.pageX + 25 + 'px')
+				                .style("opacity", 0.95);
+						} else {
+						tt.html("Player: <strong>" + d.Player +" ("+ d.Year + ") " +  "</strong><br>Salary: <strong>" +
+							d.Salary + "</strong><br>Scoring Chance (%): <strong>" + d.SC +
+							"</strong><br>Goals: <strong>" + d.G +"</strong>")
+								.style('top', d3.event.pageY - 12 + 'px')
+				                .style('left', d3.event.pageX + 25 + 'px')
+				                .style("opacity", 0.95);
+				        }
+					}).on("mouseout", function(d){
+						d3.selectAll(".Player").attr("opacity", 1);
+						tt.style("opacity", 0);
+					});
+					circlesSC.on("mousemove", function(d){
+						d3.selectAll(".Player").attr("opacity", 0.1);
+						d3.selectAll("." + d.Player.replace(/\s/g, '')).attr("opacity", 1);
+						if (d.Player == "Average"){
+							tt.html("MLS average<br>Salary: $<strong>" +
+							d.Salary + "</strong><br>Scoring Chance (%): <strong>" + d.SC +
+							"</strong><br>Goals: <strong>" + d.G + "</strong>")
+								.style('top', d3.event.pageY - 12 + 'px')
+				                .style('left', d3.event.pageX + 25 + 'px')
+				                .style("opacity", 0.95);
+						} else {
+						tt.html("Player: <strong>" + d.Player +" ("+ d.Year + ") " +  "</strong><br>Salary: $<strong>" +
+							d.Salary + "</strong><br>Scoring Chance (%): <strong>" + d.SC +
+							"</strong><br>Goals: <strong>" + d.G +"</strong>")
+								.style('top', d3.event.pageY - 12 + 'px')
+				                .style('left', d3.event.pageX + 25 + 'px')
+				                .style("opacity", 0.95);
+				        }
+					}).on("mouseout", function(d){
+						d3.selectAll(".Player").attr("opacity", 1);
+						tt.style("opacity", 0);
+					});
+					connectingLine.transition()
+						.duration(1500)
+						.attr("x1", 150)
+						.attr("x2", (w + paddingScatter[3])/ 2)
+						.attr("y1", function(d){
+							return yScale(d.SC)
+						})
+						.attr("y2", function(d){
+							return yScale(d.normSal)
+						})
+						.attr("stroke", function(d){
+							if(d.Player != "Average" && d.SC > 14.4 && d.normSal < 10.0){
+								return colors("Scoring Chance (%)");
+							} else if (d.Player != "Average" && d.SC <= 14.4 && d.normSal >= 10.0){
+								return colors("Salary");
+							} else if (d.Player != "Average" && d.SC >= 14.4 && d.normSal >= 10.0){
+								return colors("good");
+							} else {
+								return "black";
+							}
+						})
+						.attr("stroke-width", 1.5);
+					yAxisText.transition()
+						.duration(1000)
+						.attr("fill-opacity", 0);
+					yAxisText2.transition()
+						.duration(1000)
+						.attr("fill-opacity", 1);
+					//yAxis.ticks(0)
+					//	.tickFormat(function(d){ return d + "%"});
+					connectingLine.on("mousemove", function(d){
+						d3.selectAll(".Player").attr("opacity", 0.1);
+						d3.selectAll("." + d.Player.replace(/\s/g, '')).attr("opacity", 1);
+						if (d.Player == "Average"){
+							tt.html("MLS average<br>Salary: $<strong>" +
+							d.Salary + "</strong><br>Scoring Chance (%): <strong>" + d.SC +
+							"</strong><br>Goals: <strong>" + d.G + "</strong>")
+								.style('top', d3.event.pageY - 12 + 'px')
+												.style('left', d3.event.pageX + 25 + 'px')
+												.style("opacity", 0.95);
+						} else {
+						tt.html("Player: <strong>" + d.Player +" ("+ d.Year + ") " +  "</strong><br>Salary: $<strong>" +
+							d.Salary + "</strong><br>Scoring Chance (%): <strong>" + d.SC +
+							"</strong><br>Goals: <strong>" + d.G +"</strong>")
+								.style('top', d3.event.pageY - 12 + 'px')
+												.style('left', d3.event.pageX + 25 + 'px')
+												.style("opacity", 0.95);
+								}
+					}).on("mouseout", function(d){
+						d3.selectAll(".Player").attr("opacity", 1);
+						tt.style("opacity", 0);
+					});
+
+
+					d3.transition(svg).select(".y.axis")
+						.transition()
+						.duration(1000)
+						.call(yAxis);
+					d3.selectAll(".y.axis path").transition().duration(1000).attr("opacity", 0);
+					d3.selectAll(".x.axis").transition().duration(1000).attr("opacity", 0);
+					d3.selectAll("g.x.axis").select("line.gridLine").transition()
+						.duration(1000).attr("opacity", 0).remove();
+					d3.selectAll("g.y.axis").selectAll("line.gridLine").remove();
+					d3.selectAll("g.y.axis")
+		            .append("line")
+						.classed("gridLine", true)
+						.attr("x1", 0)
+						.attr("y1", 0)
+						.attr("y2", 0)
+						.attr("x2", 350);
+				//end of drawSlope
+				};
+
+
+
+				function findCorrelation(prefs, p1, p2) {
+					var si = [];
+					for (var key in prefs[p1]) {
+						if (prefs[p2][key]) si.push(key);
+					}
+					var n = si.length;
+					if (n == 0) return 0;
+					var sum1 = 0;
+					for (var i = 0; i < si.length; i++) sum1 += prefs[p1][si[i]];
+					var sum2 = 0;
+					for (var i = 0; i < si.length; i++) sum2 += prefs[p2][si[i]];
+					var sum1Sq = 0;
+					for (var i = 0; i < si.length; i++) {
+						sum1Sq += Math.pow(prefs[p1][si[i]], 2);
+					}
+					var sum2Sq = 0;
+					for (var i = 0; i < si.length; i++) {
+						sum2Sq += Math.pow(prefs[p2][si[i]], 2);
+					}
+					var pSum = 0;
+					for (var i = 0; i < si.length; i++) {
+						pSum += prefs[p1][si[i]] * prefs[p2][si[i]];
+					}
+					var num = pSum - (sum1 * sum2 / n);
+					var den = Math.sqrt((sum1Sq - Math.pow(sum1, 2) / n) *
+				      (sum2Sq - Math.pow(sum2, 2) / n));
+					if (den == 0) return 0;
+					return num / den;
+
+				//end of findCorrelation
+				};
+			//end of csv
+			});
+		</script>
+	</body>
+</html>
